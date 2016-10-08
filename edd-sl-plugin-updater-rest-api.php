@@ -248,13 +248,15 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			} else {
 
 				$item_id = $edd_sl->get_download_id_by_license( $license );
+
+				// Requested item name does not match the requested license.
+				if ( ( ! defined( 'EDD_BYPASS_NAME_CHECK' ) || ! EDD_BYPASS_NAME_CHECK ) && ! $edd_sl->check_item_name( $item_id, $item_name ) ) {
+
+					//return new WP_Error( 'item_name_mismatch', 'License entered is not for this item.', $item );
+					$item_id = $edd_sl->get_download_id_by_name( $item_name );
+				}
 			}
 
-			// Item names don't match
-			if ( ( ! defined( 'EDD_BYPASS_NAME_CHECK' ) || ! EDD_BYPASS_NAME_CHECK ) && ! $edd_sl->check_item_name( $item_id, $item_name ) ) {
-
-				return new WP_Error( 'item_name_mismatch', 'License entered is not for this item.', $item );
-			}
 		}
 
 		$download = get_post( $item_id );
