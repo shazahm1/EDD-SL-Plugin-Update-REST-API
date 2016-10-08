@@ -262,8 +262,8 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 		if ( ! $download ) {
 
 			return new WP_Error(
-				'plugin_license_does_not_match',
-				sprintf( 'License key provided does not match a valid %s', edd_get_label_singular() ),
+				'item_not_found',
+				sprintf( 'Requested item does not match a valid %s', edd_get_label_singular() ),
 				$item );
 		}
 
