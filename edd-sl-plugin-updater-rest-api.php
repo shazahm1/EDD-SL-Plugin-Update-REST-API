@@ -132,6 +132,11 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			return new WP_Error( 'edd_sl_not_found', 'EDD-SL not found.', $request );
 		}
 
+		//if ( ! isset( $request['action'] ) ) {
+		//
+		//	return new WP_Error( 'no_action', 'Request requires the action parameter `info` or `check-update`.', $request );
+		//}
+
 		$response = array();
 
 		if ( isset( $request['plugins'] ) ) {
