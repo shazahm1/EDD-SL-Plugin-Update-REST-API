@@ -44,6 +44,7 @@ class cnPlugin_Updater_REST_API {
 
 		$controllers = array(
 			'CN_Plugin_Updater_Controller',
+			'CN_License_Status_Controller',
 		);
 
 		foreach ( $controllers as $controller ) {
@@ -55,7 +56,7 @@ class cnPlugin_Updater_REST_API {
 }
 
 /**
- * REST API Entry Controller.
+ * EDD-SL REST API Plugin Updater Controller.
  *
  * @package Connections/Plugin Updater
  * @extends WP_REST_Controller
@@ -116,7 +117,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Get a collection of posts.
+	 * Get a collection of plugin update info.
 	 *
 	 * @since 1.0
 	 *
@@ -238,7 +239,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 
 			if ( empty( $license ) && empty( $item_name ) ) {
 
-				return new WP_Error( 'item_id_or_name_not_provided', 'Item name or ID is required.', $item );
+				return new WP_Error( 'item_license_or_name_not_provided', 'Item licensee or name is required.', $item );
 			}
 
 			if ( empty( $license ) ) {
@@ -323,6 +324,258 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 		);
 
 		return $query_params;
+	}
+}
+
+/**
+ * EDD-SL REST API License Status Controller.
+ *
+ * @package Connections/Plugin Updater
+ * @extends WP_REST_Controller
+ */
+class CN_License_Status_Controller extends WP_REST_Controller {
+
+	/**
+	 * @since 1.0
+	 */
+	const VERSION = '1';
+
+	/**
+	 * @since 1.0
+	 * @var string
+	 */
+	protected $namespace;
+
+	/**
+	 * @since 1.0
+	 */
+	public function __construct() {
+
+		$this->namespace = 'cn-plugin/v' . self::VERSION;
+	}
+
+	/**
+	 * Register the routes for the objects of the controller.
+	 *
+	 * @since 1.0
+	 */
+	public function register_routes() {
+
+		register_rest_route(
+			$this->namespace,
+			'/status',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'get_items' ),
+					'args'                => $this->get_collection_params(),
+				),
+				'schema' => array( $this, 'get_public_item_schema' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/item-status',
+			array(
+				array(
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => array( $this, 'get_item' ),
+					'args'                => $this->get_collection_params(),
+				),
+				'schema' => array( $this, 'get_public_item_schema' ),
+			)
+		);
+	}
+
+	/**
+	 * Get a collection of plugin status info.
+	 *
+	 * @since 1.0
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function get_items( $request ) {
+
+		// Ensure EDD-SL exists before proceeding.
+		if ( ! function_exists( 'edd_software_licensing' ) ) {
+
+			return new WP_Error( 'edd_sl_not_found', 'EDD-SL not found.', $request );
+		}
+
+		$response = array();
+
+		if ( isset( $request['plugins'] ) ) {
+
+			$plugins = cnFormatting::maybeJSONdecode( $request['plugins'] );
+
+			if ( is_array( $plugins ) ) {
+
+				foreach ( $plugins as $basename => $plugin ) {
+
+					$data = $this->prepare_item_for_response( $plugin, $request );
+
+					if ( ! is_wp_error( $data ) ) {
+
+						$response[] = $this->prepare_response_for_collection( $data );
+					}
+				}
+			}
+
+		}
+
+		$response = rest_ensure_response( $response );
+
+		return $response;
+	}
+
+	/**
+	 * Get one item from the collection
+	 *
+	 * @since 1.0
+	 *
+	 * @param WP_REST_Request $request Full data about the request.
+	 *
+	 * @return WP_Error|WP_REST_Response
+	 */
+	public function get_item( $request ) {
+
+		// Ensure EDD-SL exists before proceeding.
+		if ( ! function_exists( 'edd_software_licensing' ) ) {
+
+			return new WP_Error( 'edd_sl_not_found', 'EDD-SL not found.', $request );
+		}
+
+		if ( ! isset( $request['action'] ) ) {
+
+			return new WP_Error( 'no_action', 'Request requires the action parameter `status`.', $request );
+		}
+
+		$response = array();
+
+		if ( isset( $request['plugins'] ) ) {
+
+			$plugin = cnFormatting::maybeJSONdecode( $request['plugins'] );
+
+			$data = $this->prepare_item_for_response( $plugin, $request );
+
+			if ( ! is_wp_error( $data ) ) {
+
+				$response = $data;
+			}
+
+		}
+
+		return rest_ensure_response( $response );
+	}
+
+	/**
+	 * Prepare the item for the REST response
+	 *
+	 * Based on @see edd_software_licensing::remote_license_check()
+	 *
+	 * @since 1.0
+	 *
+	 * @param mixed           $item    WordPress representation of the item.
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return mixed
+	 */
+	public function prepare_item_for_response( $item, $request ) {
+
+		$edd_sl = edd_software_licensing();
+
+		$slug        = isset( $item['slug'] ) ? sanitize_text_field( $item['slug'] ) : FALSE;
+		$item_id     = ! empty( $item['item_id'] ) ? absint( $item['item_id'] ) : FALSE;
+		$item_name   = ! empty( $item['item_name'] ) ? rawurldecode( $item['item_name'] ) : FALSE;
+		$license     = urldecode( $item['license'] );
+		$url         = isset( $item['url'] ) ? urldecode( $item['url'] ) : '';
+		$license_id  = $edd_sl->get_license_by_key( $license );
+		$expires     = $edd_sl->get_license_expiration( $license_id );
+		$payment_id  = get_post_meta( $license_id, '_edd_sl_payment_id', TRUE );
+		$download_id = get_post_meta( $license_id, '_edd_sl_download_id', TRUE );
+		$customer_id = edd_get_payment_customer_id( $payment_id );
+
+		if ( empty( $item_id ) && empty( $item_name ) && ( ! defined( 'EDD_BYPASS_NAME_CHECK' ) || ! EDD_BYPASS_NAME_CHECK ) ) {
+
+			return new WP_Error( 'item_id_or_name_not_provided', 'Item name or ID is required.', $item );
+		}
+
+		if ( empty( $item_id ) ) {
+
+			if ( empty( $license ) && empty( $item_name ) ) {
+
+				return new WP_Error( 'item_license_or_name_not_provided', 'Item licensee or name is required.', $item );
+			}
+
+			if ( empty( $license ) ) {
+
+				$item_id = $edd_sl->get_download_id_by_name( $item_name );
+
+			} else {
+
+				$item_id = $edd_sl->get_download_id_by_license( $license );
+
+				// Requested item name does not match the requested license.
+				if ( ( ! defined( 'EDD_BYPASS_NAME_CHECK' ) || ! EDD_BYPASS_NAME_CHECK ) && ! $edd_sl->check_item_name( $item_id, $item_name ) ) {
+
+					//return new WP_Error( 'item_name_mismatch', 'License entered is not for this item.', $item );
+					$item_id = $edd_sl->get_download_id_by_name( $item_name );
+				}
+			}
+
+		}
+
+		$args = array(
+			'item_id'   => $item_id,
+			'item_name' => $item_name,
+			'key'       => $license,
+			'url'       => $url,
+		);
+
+		$result = $edd_sl->check_license( $args );
+
+		$license_limit = $edd_sl->get_license_limit( $download_id, $license_id );
+		$site_count    = $edd_sl->get_site_count( $license_id );
+
+		$download = get_post( $item_id );
+
+		if ( ! $download ) {
+
+			return new WP_Error(
+				'item_not_found',
+				sprintf( 'Requested item does not match a valid %s', edd_get_label_singular() ),
+				$item );
+		}
+
+		$customer = new EDD_Customer( $customer_id );
+
+		$data = apply_filters(
+			'edd_remote_license_check_response',
+			array(
+				'success'          => (bool) $result,
+				'license'          => $result,
+				'item_id'          => $item_id,
+				'item_name'        => $download->post_title,
+				'slug'             => ! empty( $slug ) ? $slug : $download->post_name,
+				'plugin'           => $item['basename'],
+				'expires'          => is_numeric( $expires ) ? date( 'Y-m-d H:i:s', $expires ) : $expires,
+				'payment_id'       => $payment_id,
+				'customer_name'    => ! empty( $customer->name ) ? $customer->name : '',
+				'customer_email'   => ! empty( $customer->email ) ? $customer->email : '',
+				'license_limit'    => $license_limit,
+				'site_count'       => $site_count,
+				'activations_left' => $license_limit > 0 ? $license_limit - $site_count : 'unlimited',
+			),
+			$args,
+			$license_id
+		);
+
+		$response = rest_ensure_response( $data );
+
+		return rest_ensure_response( $response );
 	}
 }
 
