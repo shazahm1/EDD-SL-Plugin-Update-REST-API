@@ -295,6 +295,12 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 						'changelog'   => wpautop( strip_tags( stripslashes( $changelog ), '<p><li><ul><ol><strong><a><em><span><br>' ) ),
 					)
 				),
+				'banners' => serialize(
+					array(
+						'high' => get_post_meta( $item_id, '_edd_readme_plugin_banner_high', true ),
+						'low'  => get_post_meta( $item_id, '_edd_readme_plugin_banner_low', true )
+					)
+				)
 			);
 
 			$data = array_merge( $data, $info );
