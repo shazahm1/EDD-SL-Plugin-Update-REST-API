@@ -229,6 +229,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 		$slug      = isset( $item['slug'] )      ? sanitize_text_field( $item['slug'] )      : FALSE;
 		$item_id   = isset( $item['item_id'] )   ? absint( $item['item_id'] )                : FALSE;
 		$item_name = isset( $item['item_name'] ) ? sanitize_text_field( $item['item_name'] ) : FALSE;
+		$beta      = isset( $item['beta'] )      ? (bool) $item['beta']                      : FALSE;
 
 		if ( empty( $item_id ) && empty( $item_name ) && ( ! defined( 'EDD_BYPASS_NAME_CHECK' ) || ! EDD_BYPASS_NAME_CHECK ) ) {
 
@@ -270,19 +271,36 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 				$item );
 		}
 
+		$stable_version = $version = $edd_sl->get_latest_version( $item_id );
+		$slug           = ! empty( $slug ) ? $slug : $download->post_name;
+		$description    = ! empty( $download->post_excerpt ) ? $download->post_excerpt : $download->post_content;
+		$changelog      = get_post_meta( $item_id, '_edd_sl_changelog', TRUE );
+
+		$beta_enabled  = (bool) get_post_meta( $item_id, '_edd_sl_beta_enabled', TRUE );
+		$download_beta = FALSE;
+
+		if ( $beta && $beta_enabled ) {
+
+			$version_beta = $edd_sl->get_beta_download_version( $item_id );
+
+			if ( version_compare( $version_beta, $stable_version, '>' ) ) {
+
+				$changelog     = get_post_meta( $item_id, '_edd_sl_beta_changelog', TRUE );
+				$version       = $version_beta;
+				$download_beta = TRUE;
+			}
+		}
+
 		$data = array(
 			'id'            => $item_id,
-			'slug'          => ! empty( $slug ) ? $slug : $download->post_name,
+			'slug'          => $slug,
 			'plugin'        => $item['basename'],
-			'new_version'   => $edd_sl->get_latest_version( $item_id ),
+			'new_version'   => $version,
 			'url'           => esc_url( get_permalink( $item_id ) ),
-			'package'       => $edd_sl->get_encoded_download_package_url( $item_id, $license, $url ),
+			'package'       => $edd_sl->get_encoded_download_package_url( $item_id, $license, $url, $download_beta ),
 		);
 
 		if ( 'info' === $request['action'] ) {
-
-			$description = ! empty( $download->post_excerpt ) ? $download->post_excerpt : $download->post_content;
-			$changelog   = get_post_meta( $item_id, '_edd_sl_changelog', TRUE );
 
 			$info = array(
 				'name'          => $download->post_title,
@@ -306,7 +324,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			$data = array_merge( $data, $info );
 		}
 
-		$response = apply_filters( 'edd_sl_license_response', $data, $download );
+		$response = apply_filters( 'edd_sl_license_response', $data, $download, $download_beta );
 		$response = rest_ensure_response( $response );
 
 		return rest_ensure_response( $response );
