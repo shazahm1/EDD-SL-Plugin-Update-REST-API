@@ -291,13 +291,33 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			}
 		}
 
+		$args = array(
+			'item_id'   => $item_id,
+			'item_name' => $item_name,
+			'key'       => $license,
+			'url'       => $url,
+		);
+
+		$status = $edd_sl->check_license( $args );
+
+		if ( 'invalid' !== $status ) {
+
+			$edd_license = $edd_sl->get_license( $license, TRUE );
+
+			// In EDD-SL 3.5 (and perhaps earlier) the disabled status would not be returned.
+			// Should be corrected in 3.6, when released. For now, lets check the post status of the license.
+			$status = 'publish' !== $edd_license->get_post_status() ? 'disabled' : $status;
+		}
+
+		$package = in_array( $status, array( 'active', 'valid' ) ) ? $edd_sl->get_encoded_download_package_url( $item_id, $license, $url, $download_beta ) : '';
+
 		$data = array(
 			'id'            => $item_id,
 			'slug'          => $slug,
 			'plugin'        => $item['basename'],
 			'new_version'   => $version,
 			'url'           => esc_url( get_permalink( $item_id ) ),
-			'package'       => $edd_sl->get_encoded_download_package_url( $item_id, $license, $url, $download_beta ),
+			'package'       => $package,
 		);
 
 		if ( 'info' === $request['action'] ) {
