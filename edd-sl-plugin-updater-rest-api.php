@@ -261,7 +261,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 
 		}
 
-		$download = get_post( $item_id );
+		$download = new EDD_SL_Download( $item_id );
 
 		if ( ! $download ) {
 
@@ -564,7 +564,7 @@ class CN_License_Status_Controller extends WP_REST_Controller {
 		$license_limit = $edd_sl->get_license_limit( $download_id, $license_id );
 		$site_count    = $edd_sl->get_site_count( $license_id );
 
-		$download = get_post( $item_id );
+		$download = new EDD_SL_Download( $item_id );
 
 		if ( ! $download ) {
 
