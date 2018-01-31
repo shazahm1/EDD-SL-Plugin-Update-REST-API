@@ -594,13 +594,24 @@ class CN_License_Status_Controller extends WP_REST_Controller {
 				$item );
 		}
 
+		$status = $edd_sl->check_license( $args );
+
+		if ( 'invalid' !== $status ) {
+
+			$edd_license = $edd_sl->get_license( $license, TRUE );
+
+			// In EDD-SL 3.5 (and perhaps earlier) the disabled status would not be returned.
+			// Should be corrected in 3.6, when released. For now, lets check the post status of the license.
+			$status = 'publish' !== $edd_license->get_post_status() ? 'disabled' : $status;
+		}
+
 		$customer = new EDD_Customer( $customer_id );
 
 		$data = apply_filters(
 			'edd_remote_license_check_response',
 			array(
 				'success'          => (bool) $result,
-				'license'          => $result,
+				'license'          => $status,
 				'item_id'          => $item_id,
 				'item_name'        => $download->post_title,
 				'slug'             => ! empty( $slug ) ? $slug : $download->post_name,
