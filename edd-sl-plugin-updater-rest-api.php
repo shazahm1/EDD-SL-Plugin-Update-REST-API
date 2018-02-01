@@ -318,6 +318,13 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			'new_version'   => $version,
 			'url'           => esc_url( get_permalink( $item_id ) ),
 			'package'       => $package,
+			// Hardcoded the icons until EDD-SL supports it natively.
+			'icons'         => serialize(
+				array(
+					'1x' => 'https://connections-pro.com/wp-content/uploads/icon-128x128.png',
+					'2x' => 'https://connections-pro.com/wp-content/uploads/icon-256x256.png',
+				)
+			),
 		);
 
 		if ( 'info' === $request['action'] ) {
@@ -338,7 +345,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 						'high' => get_post_meta( $item_id, '_edd_readme_plugin_banner_high', true ),
 						'low'  => get_post_meta( $item_id, '_edd_readme_plugin_banner_low', true )
 					)
-				)
+				),
 			);
 
 			$data = array_merge( $data, $info );
