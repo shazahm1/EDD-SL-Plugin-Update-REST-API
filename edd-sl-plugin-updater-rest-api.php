@@ -271,24 +271,63 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 				$item );
 		}
 
-		$stable_version = $version = $edd_sl->get_latest_version( $item_id );
+		$stable_version = $edd_sl->get_latest_version( $item_id );
+		$new_version    = $stable_version;
 		$slug           = ! empty( $slug ) ? $slug : $download->post_name;
 		$description    = ! empty( $download->post_excerpt ) ? $download->post_excerpt : $download->post_content;
-		$changelog      = get_post_meta( $item_id, '_edd_sl_changelog', TRUE );
+		$description    = strip_shortcodes( $description );
+		$changelog      = $download->get_changelog( true );
 
-		$beta_enabled  = (bool) get_post_meta( $item_id, '_edd_sl_beta_enabled', TRUE );
 		$download_beta = FALSE;
 
-		if ( $beta && $beta_enabled ) {
+		if ( $beta && $download->has_beta() ) {
 
 			$version_beta = $edd_sl->get_beta_download_version( $item_id );
 
 			if ( version_compare( $version_beta, $stable_version, '>' ) ) {
 
-				$changelog     = get_post_meta( $item_id, '_edd_sl_beta_changelog', TRUE );
-				$version       = $version_beta;
+				$changelog     = $download->get_beta_changelog();
+				$new_version   = $version_beta;
 				$download_beta = TRUE;
 			}
+		}
+
+		$download_requirements = $download->get_requirements();
+
+		if ( ! empty( $download_requirements ) ) {
+
+			$requirements_data = array();
+
+			foreach ( $download_requirements as $platform => $min_version ) {
+				$platform         = sanitize_text_field( $platform );
+				$platform_version = "{$platform}_version";
+				if ( ! empty( $item[ $platform_version ] ) ) {
+					$requirements_data[ $platform ] = array(
+						'minimum' => sanitize_text_field( $min_version ),
+						'current' => sanitize_text_field( $item[ $platform_version ] ),
+						'local'   => false,
+					);
+				}
+			}
+
+			/**
+			 * Allow filtering the update requirements data, used by the EDD_SL_Requirements class.
+			 *
+			 * @since
+			 *
+			 * @param array The update requirements matched against the user's current system.
+			 * @param array The requirements assigned to the download item.
+			 * @param array The item received from the item to check.
+			 */
+			$requirements_data = apply_filters( 'edd_sl_download_requirements_data', $requirements_data, $download_requirements, $item );
+
+			if ( ! empty( $requirements_data ) ) {
+				$requirements = new EDD_SL_Requirements( $requirements_data );
+				if ( ! $requirements->met() ) {
+					$new_version = ! empty( $item['version'] ) ? sanitize_text_field( urldecode( $item['version'] ) ) : false;
+				}
+			}
+
 		}
 
 		$args = array(
@@ -312,14 +351,15 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 		$package = in_array( $status, array( 'active', 'valid' ) ) ? $edd_sl->get_encoded_download_package_url( $item_id, $license, $url, $download_beta ) : '';
 
 		$data = array(
-			'id'            => $item_id,
-			'slug'          => $slug,
-			'plugin'        => $item['basename'],
-			'new_version'   => $version,
-			'url'           => esc_url( get_permalink( $item_id ) ),
-			'package'       => $package,
+			'new_version'    => $new_version,
+			'stable_version' => $stable_version,
+			'id'             => $item_id,
+			'slug'           => $slug,
+			'plugin'         => $item['basename'],
+			'url'            => esc_url( get_permalink( $item_id ) ),
+			'package'        => $package,
 			// Hardcoded the icons until EDD-SL supports it natively.
-			'icons'         => serialize(
+			'icons'          => serialize(
 				array(
 					'1x' => 'https://connections-pro.com/wp-content/uploads/icon-128x128.png',
 					'2x' => 'https://connections-pro.com/wp-content/uploads/icon-256x256.png',
@@ -351,7 +391,7 @@ class CN_Plugin_Updater_Controller extends WP_REST_Controller {
 			$data = array_merge( $data, $info );
 		}
 
-		$response = apply_filters( 'edd_sl_license_response', $data, $download, $download_beta );
+		$response = apply_filters( 'edd_sl_license_response', $data, $download, $download_beta, $item );
 		$response = rest_ensure_response( $response );
 
 		return rest_ensure_response( $response );
@@ -586,7 +626,7 @@ class CN_License_Status_Controller extends WP_REST_Controller {
 			'url'       => $url,
 		);
 
-		$result = $edd_sl->check_license( $args );
+		//$result = $edd_sl->check_license( $args );
 
 		$license_limit = $edd_sl->get_license_limit( $download_id, $license_id );
 		$site_count    = $edd_sl->get_site_count( $license_id );
@@ -603,21 +643,21 @@ class CN_License_Status_Controller extends WP_REST_Controller {
 
 		$status = $edd_sl->check_license( $args );
 
-		if ( 'invalid' !== $status ) {
+		//if ( 'invalid' !== $status ) {
 
-			$edd_license = $edd_sl->get_license( $license, TRUE );
+			//$edd_license = $edd_sl->get_license( $license, TRUE );
 
 			// In EDD-SL 3.5 (and perhaps earlier) the disabled status would not be returned.
 			// Should be corrected in 3.6, when released. For now, lets check the post status of the license.
-			$status = 'publish' !== $edd_license->get_post_status() ? 'disabled' : $status;
-		}
+			//$status = 'publish' !== $edd_license->get_post_status() ? 'disabled' : $status;
+		//}
 
 		$customer = new EDD_Customer( $customer_id );
 
 		$data = apply_filters(
 			'edd_remote_license_check_response',
 			array(
-				'success'          => (bool) $result,
+				'success'          => TRUE,
 				'license'          => $status,
 				'item_id'          => $item_id,
 				'item_name'        => $download->post_title,
